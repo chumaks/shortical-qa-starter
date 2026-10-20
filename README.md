@@ -8,6 +8,7 @@ issues found along the way.
 Everything runs against **production, read-only**: no sign-in, nothing typed
 into the paywall, no purchases.
 
+- [docs/HOW_TESTS_WORK.md](docs/HOW_TESTS_WORK.md): project structure, how a run works, what each test checks and why
 - [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md): risks, levels, release criteria, what I would ask for in week one
 - [docs/FINDINGS.md](docs/FINDINGS.md): two issues on the live site, each pinned by a test
 
@@ -107,20 +108,21 @@ to install. With one, the plan is an emulator job on pull requests (smoke) and
 a nightly run on a device farm (BrowserStack or Firebase Test Lab) across a
 small device/OS matrix.
 
-## Layout
+## Project structure
 
 ```
-shared/test-data.ts           drama under test, player URL, HLS URL matchers
-web/playwright.config.ts
-web/pages/                    DramaPage, PlayerPage (records HLS traffic)
-web/tests/                    catalog, playback, paywall, consistency
-mobile/wdio.android.conf.ts
-mobile/screens/               selectors (one file), PlayerScreen
-mobile/helpers/               app lifecycle, deep links, swipe; visual playback check
-mobile/specs/                 playback, paywall
-mobile/scripts/inspect-android.ts
-docs/                         TEST_STRATEGY, FINDINGS
+shared/      test data and URL helpers used by both suites
+web/         Playwright: config, page objects (pages/), specs (tests/)
+mobile/      WebdriverIO + Appium: config, screen objects and selectors (screens/),
+             device helpers and the visual playback check (helpers/), specs, inspect script
+docs/        test strategy, findings, how the tests work
+.github/     CI workflow for the web suite
 ```
+
+Both suites use the same layers: specs describe what the user should
+experience, page/screen objects know how to find things, helpers and shared
+data know URLs and device actions. Folder-by-folder detail and the logic of
+every test: [docs/HOW_TESTS_WORK.md](docs/HOW_TESTS_WORK.md).
 
 ## How it was built
 
