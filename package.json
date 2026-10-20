@@ -1,0 +1,36 @@
+{
+  "name": "shortical-qa-starter",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Starter QA automation for Shortical: Playwright (web) + WebdriverIO/Appium (Android).",
+  "type": "module",
+  "scripts": {
+    "test:web": "playwright test -c web/playwright.config.ts",
+    "test:web:report": "playwright show-report artifacts/web-report",
+    "setup:android": "appium driver install uiautomator2",
+    "inspect:android": "tsx mobile/scripts/inspect-android.ts",
+    "test:android": "wdio run mobile/wdio.android.conf.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^26.6.5",
+    "@types/pngjs": "^6.0.5",
+    "@wdio/appium-service": "^10.1.0",
+    "@wdio/cli": "^10.1.0",
+    "@wdio/globals": "^10.1.0",
+    "@wdio/local-runner": "^10.1.0",
+    "@wdio/mocha-framework": "^10.1.0",
+    "@wdio/spec-reporter": "^10.1.0",
+    "appium": "^3.8.0",
+    "pixelmatch": "^8.0.0",
+    "pngjs": "^7.0.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "webdriverio": "^10.1.0"
+  }
+}

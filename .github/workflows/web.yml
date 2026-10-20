@@ -1,0 +1,29 @@
+name: web
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: '17 5 * * *' # daily production check
+  workflow_dispatch:
+
+jobs:
+  playwright:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npx playwright install --with-deps chrome
+      - run: npm run test:web
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: web-report
+          path: artifacts/web-report
+          retention-days: 14
