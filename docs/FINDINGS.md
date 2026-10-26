@@ -57,3 +57,10 @@ and trust problem, and for paid traffic it can be an ad-policy problem.
   preload during the first seconds of the last free one. (Whether the CDN
   itself refuses locked media to an unauthorised client is a question for the
   team, not something this suite probes on production.)
+
+## Drafts
+
+Unconfirmed issues found by test runs or agents, waiting for a human to
+reproduce, number and file them. Format: steps, expected, actual, evidence.
+
+_None._

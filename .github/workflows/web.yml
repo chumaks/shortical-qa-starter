@@ -18,12 +18,25 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run typecheck
+
+      # Offline gate: types, ESLint, project rules, linter selftest,
+      # spec compilation, Android config. Same command as the pre-commit hook.
+      - run: npm run verify
+
       - run: npx playwright install --with-deps chrome
       - run: npm run test:web
+
+      # A green exit code is not enough: fail the job if nothing ran or tests
+      # were skipped. Prints PASS / FAIL / NOT-EARNED with counts.
+      - name: earned
+        if: ${{ !cancelled() }}
+        run: npm run earned
+
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
           name: web-report
-          path: artifacts/web-report
+          path: |
+            artifacts/web-report
+            artifacts/web-results.json
           retention-days: 14

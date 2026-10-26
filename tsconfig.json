@@ -8,7 +8,19 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
-    "types": ["node", "@wdio/globals/types", "@wdio/mocha-framework"]
+    "types": [
+      "node",
+      "@wdio/globals/types",
+      "@wdio/mocha-framework"
+    ]
   },
-  "include": ["web", "mobile", "shared"]
+  "include": [
+    "web",
+    "mobile",
+    "shared",
+    "scripts"
+  ],
+  "exclude": [
+    "scripts/selftest-fixtures"
+  ]
 }

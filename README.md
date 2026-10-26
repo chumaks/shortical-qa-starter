@@ -11,6 +11,7 @@ into the paywall, no purchases.
 - [docs/HOW_TESTS_WORK.md](docs/HOW_TESTS_WORK.md): project structure, how a run works, what each test checks and why
 - [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md): risks, levels, release criteria, what I would ask for in week one
 - [docs/FINDINGS.md](docs/FINDINGS.md): two issues on the live site, each pinned by a test
+- [AGENTS.md](AGENTS.md): rules and definition of done for AI agents working in the repo
 
 ## What is covered
 
@@ -33,6 +34,7 @@ Web: 10 tests × 2 projects (Pixel 7 emulation and desktop Chrome). Android: 6 t
 
 ```bash
 npm ci
+npm run verify                  # offline checks, ~10-30 s, same as the pre-commit hook
 npx playwright install chrome   # branded Chrome: episodes are H.264, bundled Chromium has no H.264
 npm run test:web
 npm run test:web:report         # HTML report, traces and videos for failures
@@ -101,9 +103,11 @@ and only `selectors.ts` gets an iOS variant (accessibility identifiers).
 
 ## CI
 
-[`.github/workflows/web.yml`](.github/workflows/web.yml) runs the web suite on
-every push and pull request and every morning on a schedule, and uploads the
-HTML report. Android is not in CI here: it needs an APK the pipeline is allowed
+[`.github/workflows/web.yml`](.github/workflows/web.yml) runs on every push and
+pull request and every morning on a schedule: `npm run verify`, the web suite,
+then `npm run earned`, which fails the job if the run was green without
+earning it (zero tests executed, or tests skipped). The HTML and JSON reports
+are uploaded as artifacts. Android is not in CI here: it needs an APK the pipeline is allowed
 to install. With one, the plan is an emulator job on pull requests (smoke) and
 a nightly run on a device farm (BrowserStack or Firebase Test Lab) across a
 small device/OS matrix.
@@ -115,7 +119,11 @@ shared/      test data and URL helpers used by both suites
 web/         Playwright: config, page objects (pages/), specs (tests/)
 mobile/      WebdriverIO + Appium: config, screen objects and selectors (screens/),
              device helpers and the visual playback check (helpers/), specs, inspect script
+scripts/     quality gates: project rules linter, its selftest, NOT-EARNED check,
+             mutation check, offline WDIO config check, git hook setup
 docs/        test strategy, findings, how the tests work
+.claude/     agent harness: hooks, reviewer subagent, skills
+.githooks/   pre-commit: npm run verify
 .github/     CI workflow for the web suite
 ```
 
@@ -124,15 +132,35 @@ experience, page/screen objects know how to find things, helpers and shared
 data know URLs and device actions. Folder-by-folder detail and the logic of
 every test: [docs/HOW_TESTS_WORK.md](docs/HOW_TESTS_WORK.md).
 
-## How it was built
+## How AI is used here
 
-I explored the web client with an AI assistant (Claude) driving a browser:
-DOM structure, the HLS traffic on the CDN, how the gate behaves on locked
-episodes. That is where the findings came from. Code drafts were AI-assisted;
-each test was reviewed against the same checklist I use at work: the assertion
-checks a user-visible outcome, the test fails when the behaviour breaks, no
-fixed waits except a documented negative check, no mocking of the thing under
-test.
+AI is used as a tool for writing and maintaining tests, inside a harness that
+does not take the agent's word for anything. What can be checked by code is
+checked by code; what needs judgement goes to a separate reviewer; a human
+merges.
+
+| Layer | What | Where |
+|---|---|---|
+| Instructions | Commands, boundaries, definition of done | [AGENTS.md](AGENTS.md), [CLAUDE.md](CLAUDE.md), skills in [`.claude/skills/`](.claude/skills) |
+| Deterministic checks | Types; ESLint with type-aware rules (a missing `await` is the classic way for a UI test to assert nothing); 7 project rules: no fixed waits without a reason, 30 s wait cap, no locators in specs, Android locators in one file, no `.only`, `test.fail` must cite a finding, **no writes to production** (no override) | `npm run verify`, [`scripts/rules.ts`](scripts/rules.ts) |
+| Checks of the checks | The rules linter runs against files with 20 planted defects and must catch each one; the NOT-EARNED verdict logic against known cases | `npm run selftest` |
+| Immediate feedback | After every file edit, rules + ESLint run on that file and failures go straight back to the agent | [`.claude/hooks/`](.claude/hooks) |
+| Bypass guards | Blocks `--no-verify`, `\|\| true` after a check, `;` between a check and a commit, force push; edits to the guardrail files need a human's approval | [`.claude/hooks/`](.claude/hooks), [`.githooks/pre-commit`](.githooks/pre-commit) |
+| Can the test fail? | Applies a breaking change, runs the test, requires it to fail, restores the file | `npm run mutate` |
+| Zero is not green | Every "nothing happened" assertion has a positive control first; CI fails a run where nothing executed | specs, `npm run earned` |
+| Separate review | Read-only subagent on a different model; writes its expectations from the risk before reading the code, then returns ACCEPT / REVISE / REJECT | [`.claude/agents/test-reviewer.md`](.claude/agents/test-reviewer.md) |
+| Human | Reviews the diff, decides on contradictions, commits and pushes | |
+
+Applying these rules to this repo's own code found four real problems, fixed
+in the same change: two specs with locators outside page objects, and two
+negative checks that could pass without measuring anything (a paywall test
+asserting "no media requested" with no proof the network log worked, and an
+Android "video not playing" check that would pass on black FLAG_SECURE
+screenshots).
+
+The site exploration behind FINDINGS (DOM structure, HLS traffic on the CDN,
+gate behaviour) was also done with an AI assistant driving a browser, and
+every finding was reproduced before it was written down.
 
 ---
 

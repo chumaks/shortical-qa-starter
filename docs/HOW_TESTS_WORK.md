@@ -12,7 +12,9 @@ shortical-qa-starter/
 ├── web/                        Playwright suite for shortical.com
 │   ├── playwright.config.ts    Projects (Pixel 7, desktop), branded Chrome, reports
 │   ├── pages/                  Page objects
+│   │   ├── HomePage.ts         Home: links to series pages
 │   │   ├── DramaPage.ts        Series page: episode count, free range, "Watch free" CTA
+│   │   ├── EpisodePage.ts      Episode landing page: "N of M", locked notice
 │   │   └── PlayerPage.ts       Player: episode counter, video state, gate, HLS traffic log
 │   └── tests/                  Specs, one file per risk area
 │       ├── catalog.spec.ts
@@ -33,6 +35,16 @@ shortical-qa-starter/
 │   │   └── paywall.spec.ts
 │   └── scripts/
 │       └── inspect-android.ts  Dumps the view hierarchy and a testability report
+├── scripts/                    Quality gates (see "Quality gates" below)
+│   ├── rules.ts, check-rules.ts    Project rules linter
+│   ├── selftest.ts + selftest-fixtures/   Planted defects the linter must catch
+│   ├── earned.ts, check-earned.ts  PASS / FAIL / NOT-EARNED for a finished run
+│   ├── mutation-check.ts       Breaks one thing, requires the test to fail
+│   ├── check-wdio-config.ts    Offline check of the Android config
+│   └── setup-git-hooks.mjs     Points git at .githooks/ on npm install
+├── .claude/                    Agent harness: hooks, test-reviewer subagent, skills
+├── .githooks/pre-commit        npm run verify before every commit
+├── AGENTS.md, CLAUDE.md        Rules and definition of done for AI agents
 ├── docs/                       Strategy, findings, this file
 ├── .github/workflows/web.yml   CI for the web suite
 └── artifacts/                  Reports, traces, screenshots (created by runs, not committed)
@@ -104,8 +116,14 @@ the gate is checked for being shown; nothing is typed into it.
 
 | Test | Logic |
 |---|---|
-| last free episode plays without a gate | Reads the free range from the series page, opens the last free episode, waits for 5 s of playback, checks the gate is not shown, and checks that **no media of the first locked episode** was requested. The player preloads the next episode, so this guards against preloading paid content to a client that hasn't paid. |
-| first locked episode is gated | Opens episode N+1: the counter shows N+1, the "Save your progress" gate with an email field and Continue button is visible. Then watches for 3 s and checks that playback stays at 0 and **no media for that episode was requested at all**. This is the one fixed wait in the suite: a "nothing happened" check needs an observation window. |
+| last free episode plays without a gate | Reads the free range from the series page, opens the last free episode, waits for 5 s of playback, checks the gate is not shown. **Positive control:** the network log holds at least two media requests for this episode, proving the capture works. Only then checks that **no media of the first locked episode** was requested. The player preloads the next episode, so this guards against preloading paid content to a client that hasn't paid. |
+| first locked episode is gated | **Positive control first:** in the same page, plays the last free episode for 2 s and checks its media was captured. Then opens episode N+1: the counter shows N+1, the "Save your progress" gate with an email field and Continue button is visible. Watches for 3 s, checks a `<video>` element exists (otherwise "currentTime is 0" would be true of nothing), that playback stays at 0, and that **no media for that episode was requested at all**. The 3 s window is the one fixed wait in the suite, marked with `lint-allow` and its reason. |
+
+Why the positive controls: an assertion that something did **not** happen
+passes just as well when the measurement is broken. If the network listener
+stopped recording, "no requests for the locked episode" would stay green
+forever. Each negative check first proves, in the same test, that the
+measurement can see something.
 
 **consistency.spec.ts**: the same facts agree everywhere they are shown. Both
 tests pin live bugs ([FINDINGS.md](FINDINGS.md)) and are marked `test.fail()`.
@@ -271,8 +289,10 @@ picture instead:
    more than 2%. **Not playing** = every window changed by less than 2%.
 
 If the screenshots are black, the app sets `FLAG_SECURE` (screen capture
-blocked, common for paid video). The check then fails with that message
-instead of passing or failing silently; a QA build without the flag fixes it.
+blocked, common for paid video). **Both** checks then fail with that message,
+and for "not playing" this matters most: two black frames never differ, so
+without the check "nothing plays behind the gate" would pass without looking
+at anything. A QA build without the flag fixes it.
 
 ### What each test checks
 
@@ -295,6 +315,41 @@ instead of passing or failing silently; a QA build without the flag fixes it.
 ## CI
 
 `.github/workflows/web.yml` runs on every push and pull request, daily at
-05:17 UTC as a production check, and on demand: install, typecheck, install
-branded Chrome, run the web suite, upload the HTML report as an artifact.
+05:17 UTC as a production check, and on demand:
+
+1. `npm ci`, then `npm run verify` (the same offline gate as the pre-commit hook);
+2. install branded Chrome, run the web suite;
+3. `npm run earned` reads `artifacts/web-results.json` and fails the job unless
+   the run is **PASS**: tests executed, none failed, none skipped. A run where
+   nothing executed exits 0 from Playwright but is **NOT-EARNED** here;
+4. upload the HTML and JSON reports as artifacts.
+
 Android is not in CI: it needs an APK the pipeline is allowed to install.
+
+## Quality gates
+
+Checks that run before any test touches the product. All offline.
+
+| Gate | Catches | Command |
+|---|---|---|
+| TypeScript | Type errors in specs, page objects, helpers, scripts | `npm run typecheck` |
+| ESLint (type-aware) | Missing `await` (`no-floating-promises`, `missing-playwright-await`), `.only`/`.skip`, tests without assertions | `npm run lint` |
+| Project rules | Fixed waits without a reason, waits over 30 s, locators in specs, Android locators outside `selectors.ts`, `.only`, `test.fail` without a FINDINGS number, any write to production | `npm run rules` |
+| Selftest | The rules linter missing one of 20 planted defects; wrong PASS/FAIL/NOT-EARNED logic | `npm run selftest` |
+| Spec compilation | Specs that don't load (syntax, imports) | `npm run list:web`, `npm run check:wdio` |
+
+`npm run verify` runs all of them in that order and stops at the first
+failure. The git pre-commit hook runs it on every commit, for people and
+agents alike.
+
+Two more, which need the network:
+
+- `npm run mutate -- <file> "<from>" "<to>" "<test title>"` applies one
+  breaking change, runs that test, and passes only if the test **fails**. The
+  file is restored either way. Example: the paywall test must fail if it looks
+  one episode too early
+  (`"const firstLocked = lastFree + 1;"` -> `"const firstLocked = lastFree;"`).
+- `npm run earned` after a run, as in CI.
+
+How AI agents fit into this (hooks, the reviewer subagent, skills, the
+definition of done) is in [AGENTS.md](../AGENTS.md) and the README.

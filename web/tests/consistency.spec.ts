@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { DRAMA_ID, DRAMA_SLUG } from '../../shared/test-data';
 import { DramaPage } from '../pages/DramaPage';
+import { EpisodePage } from '../pages/EpisodePage';
 import { PlayerPage } from '../pages/PlayerPage';
 
 /**
@@ -20,9 +21,9 @@ test('episode count agrees across series page, episode page and player', async (
   await drama.open();
   const onSeriesPage = await drama.declaredEpisodeCount();
 
-  await page.goto(`/drama/${DRAMA_SLUG}/episode-1`);
-  const ofText = await page.getByText(/^1 of \d+$/).first().innerText();
-  const onEpisodePage = Number(ofText.match(/of (\d+)/)![1]);
+  const episodePage = new EpisodePage(page, DRAMA_SLUG);
+  await episodePage.open(1);
+  const onEpisodePage = await episodePage.declaredTotal();
 
   const player = new PlayerPage(page);
   await player.open(DRAMA_ID, 1);
@@ -43,7 +44,8 @@ test('locked episode page does not promise free viewing in its title', async ({ 
   await drama.open();
   const firstLocked = (await drama.lastFreeEpisode()) + 1;
 
-  await page.goto(`/drama/${DRAMA_SLUG}/episode-${firstLocked}`);
-  await expect(page.getByText('Unlock with coins or VIP').first()).toBeVisible();
+  const episodePage = new EpisodePage(page, DRAMA_SLUG);
+  await episodePage.open(firstLocked);
+  await expect(episodePage.lockedNotice()).toBeVisible();
   await expect(page).not.toHaveTitle(/watch free/i);
 });

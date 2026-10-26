@@ -20,6 +20,8 @@ export default defineConfig({
   reporter: [
     ['list'],
     ['html', { outputFolder: '../artifacts/web-report', open: 'never' }],
+    // Read by `npm run earned` to tell a real pass from an empty one.
+    ['json', { outputFile: '../artifacts/web-results.json' }],
   ],
   use: {
     baseURL: BASE_URL,

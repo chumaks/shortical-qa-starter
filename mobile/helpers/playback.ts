@@ -33,7 +33,7 @@ async function centreFrame(): Promise<PNG> {
 
 export async function changedPixelRatio(intervalMs = 1_500): Promise<number> {
   const a = await centreFrame();
-  await browser.pause(intervalMs);
+  await browser.pause(intervalMs); // lint-allow: sampling interval between two frames, not a wait for state
   const b = await centreFrame();
   const diff = pixelmatch(a.data, b.data, null, a.width, a.height, { threshold: 0.1 });
   return diff / (a.width * a.height);
@@ -48,11 +48,21 @@ export async function isBlackFrame(): Promise<boolean> {
 
 const PLAYING = 0.02;
 
-/** Playing = the picture keeps changing over several consecutive windows. */
-export async function expectVideoPlaying(windows = 3) {
+/**
+ * Both checks refuse to run on black frames. For "playing" a black frame would
+ * fail anyway; for "not playing" it would PASS without checking anything,
+ * because two black screenshots never differ. Zero change measured on a picture
+ * we can't see is not evidence.
+ */
+async function assertFrameVisible() {
   if (await isBlackFrame()) {
     throw new Error('Screenshots are black: the app probably sets FLAG_SECURE. Visual playback check needs a QA build without it.');
   }
+}
+
+/** Playing = the picture keeps changing over several consecutive windows. */
+export async function expectVideoPlaying(windows = 3) {
+  await assertFrameVisible();
   const ratios: number[] = [];
   for (let i = 0; i < windows; i++) ratios.push(await changedPixelRatio());
   const moving = ratios.filter((r) => r > PLAYING).length;
@@ -60,6 +70,7 @@ export async function expectVideoPlaying(windows = 3) {
 }
 
 export async function expectVideoNotPlaying(windows = 2) {
+  await assertFrameVisible();
   for (let i = 0; i < windows; i++) {
     expect(await changedPixelRatio()).toBeLessThanOrEqual(PLAYING);
   }

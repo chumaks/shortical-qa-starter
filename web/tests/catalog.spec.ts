@@ -1,11 +1,13 @@
 import { expect, test } from '@playwright/test';
 import { DRAMA_SLUG } from '../../shared/test-data';
 import { DramaPage } from '../pages/DramaPage';
+import { HomePage } from '../pages/HomePage';
 
 test.describe('Catalog', () => {
   test('home page lists dramas that link to series pages', async ({ page }) => {
-    await page.goto('/');
-    const dramas = page.locator('a[href^="/drama/"]');
+    const home = new HomePage(page);
+    await home.open();
+    const dramas = home.dramaLinks();
     await expect(dramas.first()).toBeVisible();
     expect(await dramas.count(), 'home should show a real catalogue, not an empty shell').toBeGreaterThanOrEqual(10);
   });

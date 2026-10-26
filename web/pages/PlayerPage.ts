@@ -1,5 +1,5 @@
 import { expect, type Page, type Response } from '@playwright/test';
-import { HLS_MANIFEST, HLS_SEGMENT, playerUrl } from '../../shared/test-data';
+import { HLS_MANIFEST, HLS_SEGMENT, isMediaFor, playerUrl } from '../../shared/test-data';
 
 export type VideoState = { currentTime: number; paused: boolean; readyState: number };
 
@@ -49,6 +49,20 @@ export class PlayerPage {
       }));
       return videos.sort((a, b) => b.currentTime - a.currentTime)[0] ?? { currentTime: 0, paused: true, readyState: 0 };
     });
+  }
+
+  /**
+   * Number of <video> elements on the page. `activeVideo()` falls back to
+   * currentTime 0 when there are none, so a "nothing plays" check must first
+   * prove there is a player to look at.
+   */
+  async videoElementCount(): Promise<number> {
+    return this.page.locator('video').count();
+  }
+
+  /** HLS requests recorded so far for one episode. */
+  mediaFor(dramaId: number, episode: number) {
+    return this.media.filter((m) => isMediaFor(m.url, dramaId, episode));
   }
 
   /** Resolves once playback position reaches `seconds`. */

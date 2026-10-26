@@ -1,0 +1,9 @@
+#!/bin/sh
+# Every commit must pass the offline verification (types, ESLint, project
+# rules, linter selftest, spec compilation, WDIO config). About half a minute,
+# no network, no device.
+echo "pre-commit: npm run verify"
+npm run --silent verify || {
+  echo "pre-commit: verify failed, commit aborted"
+  exit 1
+}
