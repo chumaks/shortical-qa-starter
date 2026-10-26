@@ -75,12 +75,20 @@ export class PlayerPage {
       .toBeGreaterThan(seconds);
   }
 
-  /** Email gate shown on episodes past the free range for a signed-out viewer. */
+  /**
+   * Email gate shown on episodes past the free range for a signed-out viewer.
+   *
+   * There is no test id, so the gate is found by its copy, and the copy has
+   * already changed once: "Save your progress" / "Continue" until 2026-10-20,
+   * "Sign in" / "Continue with Email" by 2026-10-26. Both are accepted; a third
+   * wording should fail the test (that is a product change worth seeing), and
+   * the lasting fix is a data-testid on the gate (docs/FINDINGS.md).
+   */
   gate() {
     return {
-      heading: this.page.getByRole('heading', { name: 'Save your progress' }),
+      heading: this.page.getByRole('heading', { name: /^(sign in|save your progress)$/i }),
       email: this.page.locator('input[type="email"]:visible').first(),
-      continue: this.page.getByRole('button', { name: 'Continue', exact: true }),
+      continue: this.page.getByRole('button', { name: /^continue( with email)?$/i }),
     };
   }
 }

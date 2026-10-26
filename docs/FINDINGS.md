@@ -51,6 +51,11 @@ and trust problem, and for paid traffic it can be an ad-policy problem.
   localisation (the catalogue is being dubbed into several languages). Adding
   test ids to the player header, episode list, gate and paywall would be the
   cheapest stability win.
+  It already mattered once: between 2026-10-20 and 2026-10-26 the gate's copy
+  changed from "Save your progress" / "Continue" to "Sign in" / "Continue with
+  Email". The paywall test went red in CI on the first run after the change;
+  the behaviour (locked episode gated, nothing streamed) was unchanged. The
+  locator now accepts both wordings; a test id would make it independent of copy.
 - Things that already work well and the suite now protects: the next episode's
   manifest is preloaded during playback (fast "next"), and no media for a
   locked episode is requested: neither on the locked episode itself nor as a

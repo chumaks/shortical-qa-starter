@@ -24,6 +24,6 @@ export const S = {
    * subscription paywall. Kept broad on purpose until the real ids are known.
    */
   gate: textMatches(
-    '(?i).*(save your progress|unlock|subscribe|coins|get vip|vip|continue with google).*',
+    '(?i).*(sign in|save your progress|continue with email|unlock|subscribe|coins|get vip|vip|continue with google).*',
   ),
 } as const;
