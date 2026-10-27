@@ -18,6 +18,7 @@
     "check:wdio": "tsx scripts/check-wdio-config.ts",
     "verify": "npm run typecheck && npm run lint && npm run rules && npm run selftest && npm run list:web && npm run check:wdio",
     "earned": "tsx scripts/check-earned.ts",
+    "summary": "tsx scripts/report-summary.ts",
     "mutate": "tsx scripts/mutation-check.ts",
     "prepare": "node scripts/setup-git-hooks.mjs"
   },
@@ -44,5 +45,10 @@
     "typescript": "~5.9",
     "typescript-eslint": "^8.72.0",
     "webdriverio": "^10.1.0"
+  },
+  "overrides": {
+    "shell-quote": "^1.11.0",
+    "body-parser": "^2.4.0",
+    "serialize-javascript": "^7.1.3"
   }
 }

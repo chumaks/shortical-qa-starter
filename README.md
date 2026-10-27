@@ -106,8 +106,11 @@ and only `selectors.ts` gets an iOS variant (accessibility identifiers).
 [`.github/workflows/web.yml`](.github/workflows/web.yml) runs on every push and
 pull request and every morning on a schedule: `npm run verify`, the web suite,
 then `npm run earned`, which fails the job if the run was green without
-earning it (zero tests executed, or tests skipped). The HTML and JSON reports
-are uploaded as artifacts. Android is not in CI here: it needs an APK the pipeline is allowed
+earning it (zero tests executed, or tests skipped). A results table with
+failure messages is written to the run page (job summary), the HTML and JSON
+reports are uploaded as artifacts, and with the repository variable
+`PUBLISH_REPORT=true` and Pages enabled the HTML report is also published to
+GitHub Pages. Android is not in CI here: it needs an APK the pipeline is allowed
 to install. With one, the plan is an emulator job on pull requests (smoke) and
 a nightly run on a device farm (BrowserStack or Firebase Test Lab) across a
 small device/OS matrix.
