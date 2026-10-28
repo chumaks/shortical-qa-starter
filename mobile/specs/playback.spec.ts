@@ -1,49 +1,73 @@
-import { DRAMA_ID } from '../../shared/test-data';
-import { coldStart, isAppInForeground, openEpisodeByLink, sendToBackgroundFor, swipeUp } from '../helpers/app';
-import { expectVideoPlaying } from '../helpers/playback';
+import { bringToFront, coldStart, isAppInForeground, pressHome } from '../helpers/app';
+import { expectVideoNotPlaying, expectVideoPlaying, waitForAnotherPlayer } from '../helpers/playback';
+import { home } from '../screens/HomeScreen';
 import { player } from '../screens/PlayerScreen';
 
+/**
+ * Playback on the Play Store build, on the For You feed (it plays right away,
+ * no specific series needed). "Playing" is read from the app's audio player
+ * state in Android (helpers/playback.ts): screenshots are black (FLAG_SECURE).
+ *
+ * Every test starts from a cold start, so no test depends on where the previous one left the app. */
+async function openFeed() {
+  await coldStart();
+  await home.waitForHome();
+  await home.openForYou();
+  await player.waitForFeed();
+}
+
 describe('Android: playback', () => {
-  it('cold start lands in the player and video starts within 10 s', async () => {
+  it('cold start lands on Home with the bottom navigation', async () => {
     const started = Date.now();
     await coldStart();
-    await player.waitForPlayer(10_000);
-    await player.dismissOverlay(); // first-run promos are out of scope here
-    await expectVideoPlaying();
-    console.log(`[metric] cold start to playing video: ${Date.now() - started} ms`);
+    await home.waitForHome();
+    console.log(`[metric] cold start to Home: ${Date.now() - started} ms`);
   });
 
-  it('free episode opened by link plays', async () => {
-    await openEpisodeByLink(DRAMA_ID, 1);
-    await player.waitForPlayer();
-    expect((await player.readCounter()).current).toBe(1);
-    await expectVideoPlaying();
+  it('For You opens the feed and video starts within 10 s', async () => {
+    await coldStart();
+    await home.waitForHome();
+    const tapped = Date.now();
+    await home.openForYou();
+    await player.waitForFeed();
+    await expectVideoPlaying(10_000);
+    console.log(`[metric] For You tap to playing: ${Date.now() - tapped} ms`);
   });
 
-  it('swipe up moves to the next episode and it plays', async () => {
-    await openEpisodeByLink(DRAMA_ID, 1);
-    await player.waitForPlayer();
-    const before = await player.readCounter();
+  it('tap on the video pauses it, a second tap resumes', async () => {
+    await openFeed();
+    await expectVideoPlaying();
 
-    await swipeUp();
+    await player.tapVideo();
+    await expectVideoNotPlaying();
 
-    await browser.waitUntil(async () => (await player.readCounter()).current !== before.current, {
-      timeout: 10_000,
-      timeoutMsg: 'episode counter did not change after swipe',
-    });
-    expect((await player.readCounter()).current).toBe(before.current + 1);
+    await player.tapVideo();
     await expectVideoPlaying();
   });
 
-  it('playback resumes after the app is backgrounded', async () => {
-    await openEpisodeByLink(DRAMA_ID, 2);
-    await player.waitForPlayer();
+  it('swipe up starts a different video (next series card)', async () => {
+    await openFeed();
+    const before = await expectVideoPlaying();
+
+    await player.swipeToNext();
+
+    const after = await waitForAnotherPlayer(before);
+    expect(after).not.toBe(before);
+    await expectVideoPlaying();
+  });
+
+  it('going to the background stops playback, coming back resumes it', async () => {
+    await openFeed();
     await expectVideoPlaying();
 
-    await sendToBackgroundFor(5);
+    await pressHome();
+    expect(await isAppInForeground()).toBe(false);
+    // The app may release its players in the background; the "playing" check
+    // above is the proof that this measurement sees them when they exist.
+    await expectVideoNotPlaying({ requirePlayers: false });
 
-    expect(await isAppInForeground()).toBe(true);
-    expect((await player.readCounter()).current).toBe(2);
+    await bringToFront();
+    await player.waitForFeed();
     await expectVideoPlaying();
   });
 });

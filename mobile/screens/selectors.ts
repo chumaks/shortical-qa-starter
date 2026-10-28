@@ -1,29 +1,30 @@
 /**
- * Every Android locator lives here, so swapping text-based fallbacks for real
- * test tags is a one-file change.
+ * Every Android locator lives here, so moving to test tags is a one-file change.
  *
- * STATUS: provisional. Written without access to the app's view hierarchy, from
- * the labels the web client uses (the apps share a KMP codebase, so copy is
- * likely shared). `npm run inspect:android` dumps the real hierarchy; replace
- * each entry with the resource-id / content-desc it reports.
+ * Taken from the real view hierarchy of Shortical 0.5.68 (build 562) with
+ * `npm run inspect:android` on 2026-10-28. What the app exposes:
  *
- * Preferred order once the app has them:
- *   1. ~accessibility id (content-desc) or Compose testTag exposed as resource-id
- *   2. resource-id
- *   3. UiSelector text match (current fallback; breaks on copy and locale changes)
+ * - Bottom navigation: icons have content-desc (Home, For You, My List,
+ *   Rewards, Profile). Stable and copy-independent enough to use.
+ * - For You (trailer feed, one card per series): the video area is the one
+ *   scrollable node; the card's title, description and "Watch Now" are text.
+ * - Series player (behind "Watch Now"): the ExoPlayer view has a resource-id
+ *   (player_view). Its overlay (episode counter, buttons) is Compose with no
+ *   semantics: no text, no desc, no id. Nothing on it can be located.
+ *
+ * See docs/FINDINGS.md (testability) for what would make this better.
  */
 const ui = (expr: string) => `android=new UiSelector().${expr}`;
-const textMatches = (re: string) => ui(`textMatches("${re}")`);
 
 export const S = {
-  /** "14/86": episode counter in the player header (web: same format). */
-  episodeCounter: textMatches('^\\d+/\\d+$'),
+  tabHome: '~Home',
+  tabForYou: '~For You',
+  tabMyList: '~My List',
+  tabProfile: '~Profile',
 
-  /**
-   * Anything that blocks a locked episode: sign-in/email gate, coins or
-   * subscription paywall. Kept broad on purpose until the real ids are known.
-   */
-  gate: textMatches(
-    '(?i).*(sign in|save your progress|continue with email|unlock|subscribe|coins|get vip|vip|continue with google).*',
-  ),
+  /** ExoPlayer's view in the series player (not on the For You feed). */
+  playerView: ui('resourceId("shortical.com:id/player_view")'),
+
+  /** The For You video area: the only scrollable element on that screen. */
+  feed: ui('scrollable(true)'),
 } as const;

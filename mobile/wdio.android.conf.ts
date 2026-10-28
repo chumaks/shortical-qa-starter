@@ -1,4 +1,4 @@
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { ANDROID_PACKAGE } from './constants';
 
 /**
@@ -42,9 +42,13 @@ export const config: WebdriverIO.Config = {
     mkdirSync('./artifacts', { recursive: true });
   },
 
+  // Evidence on failure. The screenshot is black for this app (FLAG_SECURE), so
+  // the view hierarchy at the moment of failure is the useful part: it shows
+  // which screen the app was on and what could be located there.
   afterTest: async (test, _context, { passed }) => {
     if (!passed) {
       const name = test.title.replace(/[^\w-]+/g, '_');
+      writeFileSync(`./artifacts/android-fail-${name}.xml`, await browser.getPageSource());
       await browser.saveScreenshot(`./artifacts/android-fail-${name}.png`);
     }
   },

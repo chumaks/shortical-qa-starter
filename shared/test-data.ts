@@ -17,7 +17,7 @@ export const dramaIdFromSlug = (slug: string): number => {
 
 export const DRAMA_ID = dramaIdFromSlug(DRAMA_SLUG);
 
-/** Same URL the web "Watch free" button opens; also used as the Android deep link. */
+/** Same URL the web "Watch free" button opens. The Android app does not handle it (docs/FINDINGS.md). */
 export const playerUrl = (dramaId: number, episode: number): string =>
   `${BASE_URL}/player?deep_link_sub1=${dramaId}&deep_link_sub2=${episode}`;
 

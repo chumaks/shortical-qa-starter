@@ -25,11 +25,12 @@ shortical-qa-starter/
 │   ├── wdio.android.conf.ts    Device capabilities, Appium service, failure screenshots
 │   ├── constants.ts            App package id (shortical.com)
 │   ├── screens/                Screen objects
-│   │   ├── selectors.ts        Every Android locator, in one file
-│   │   └── PlayerScreen.ts     Player: episode counter, gate, overlay dismissal
+│   │   ├── selectors.ts        Every Android locator, in one file (taken from the real app)
+│   │   ├── HomeScreen.ts       Home: bottom navigation, open the For You feed
+│   │   └── PlayerScreen.ts     For You feed: wait for it, tap to pause, swipe to next card
 │   ├── helpers/
-│   │   ├── app.ts              App lifecycle: cold start, deep link, background, swipe
-│   │   └── playback.ts         Visual "is the video playing" check
+│   │   ├── app.ts              App lifecycle: cold start, Home key, bring to front
+│   │   └── playback.ts         "Is the video playing" from Android's audio player state
 │   ├── specs/
 │   │   ├── playback.spec.ts
 │   │   └── paywall.spec.ts
@@ -60,9 +61,10 @@ The two suites follow the same three layers, so a change lands in one place:
 | **Page / screen objects** | `web/pages/` | `mobile/screens/` | How to find and read things on a screen. |
 | **Helpers and data** | `shared/` | `mobile/helpers/`, `shared/` | URLs, test data, device actions, the playback check. |
 
-`shared/test-data.ts` is used by both suites: the web player and the Android
-deep link open the same URL (`/player?deep_link_sub1=<drama>&deep_link_sub2=<episode>`),
-and HLS media on the CDN is recognised the same way (`/<drama>/<episode>/...m3u8|.ts`).
+`shared/test-data.ts` holds the series under test, the web player URL
+(`/player?deep_link_sub1=<drama>&deep_link_sub2=<episode>`) and how HLS media on
+the CDN is recognised (`/<drama>/<episode>/...m3u8|.ts`). The Android app does
+not open that URL (see "Locators" below), so the Android suite doesn't use it.
 
 ## Test data
 
@@ -70,9 +72,8 @@ Everything starts from one series slug, `room-service-193` by default
 (override with `SHORTICAL_DRAMA`). The number at the end is the drama id used by
 the player and the CDN. Nothing else is hard-coded on the web side: the free
 range ("Episodes 1–13 are free") and the episode total are read from the series
-page at run time, so the same tests work for any series. The Android suite
-can't read the website, so its free range comes from `SHORTICAL_LAST_FREE`
-(default 13).
+page at run time, so the same tests work for any series. The Android tests
+don't depend on a particular series: they use whatever the For You feed plays.
 
 ## Web suite (Playwright)
 
@@ -154,12 +155,12 @@ bug was seen.
 │ Appium server :4723 (started by WDIO)        │   adb    │ UiAutomator2 server (test APK)   │
 │   └ UiAutomator2 driver ─────────────────────┼─────────►│   ↓ Android UiAutomator APIs     │
 │                                              │ port fwd │ Shortical app (shortical.com)    │
-│ pixelmatch (playback check, runs on the PC)  │◄─────────┤ screenshots as base64 PNG        │
+│ playback check (parses the result on the PC) │◄─────────┤ `dumpsys audio` via mobile: shell│
 └──────────────────────────────────────────────┘          └──────────────────────────────────┘
 ```
 
 The test code never touches the phone directly. Every command (find element,
-read text, swipe, screenshot) goes spec → WebdriverIO → Appium → UiAutomator2
+read text, swipe, a shell command) goes spec → WebdriverIO → Appium → UiAutomator2
 server on the device → the app, and the answer comes back the same way.
 
 ### A run, step by step
@@ -169,7 +170,7 @@ server on the device → the app, and the answer comes back the same way.
 | Step | What happens |
 |---|---|
 | Device | USB debugging on (or an emulator with Google Play). Shortical installed from the Play Store. `adb devices` shows the device as `device`, not `unauthorized`. |
-| `npm ci` | Installs WebdriverIO, the Appium server itself (as a project dependency, so no global install) and the image libraries for the playback check. |
+| `npm ci` | Installs WebdriverIO and the Appium server itself (as a project dependency, so no global install). |
 | Android driver | `appium-uiautomator2-driver` is a dev dependency, so `npm ci` installs the pinned version with the project. `npm run setup:android` (re)installs it if needed. `npx appium driver doctor uiautomator2` checks that `ANDROID_HOME`, `JAVA_HOME` and `adb` are in place. |
 
 **1. Start: `ANDROID_UDID=<id> npm run test:android`**
@@ -208,13 +209,13 @@ Inside a spec, each `it` is one scenario. What the typical commands turn into:
 
 | In the code | On the device |
 |---|---|
-| `openEpisodeByLink(193, 1)` → `mobile: deepLink` | `am start -a android.intent.action.VIEW -d https://shortical.com/player?...` for package `shortical.com`: Android opens the player on that episode, as if the link were tapped in an ad |
-| `$(S.episodeCounter)` → `android=new UiSelector().textMatches(...)` | UiAutomator searches the current screen's view tree for a node with that text |
-| `player.readCounter()` | Reads the node's text, e.g. `"14/86"`, parsed into `{ current: 14, total: 86 }` |
-| `swipeUp()` → `mobile: swipeGesture` | A real finger-like swipe in the middle of the screen |
-| `sendToBackgroundFor(5)` → `mobile: backgroundApp` | Home button, wait 5 s, bring the app back |
+| `home.openForYou()` → `$('~For You').click()` | UiAutomator finds the tab by its accessibility label and taps it |
+| `player.waitForFeed()` → `UiSelector().scrollable(true)` | Waits for the For You video area (the one scrollable element there) |
+| `player.tapVideo()` → `mobile: clickGesture` | A tap in the middle of the video (pause / resume) |
+| `player.swipeToNext()` → `mobile: swipeGesture` on the feed | A finger-like swipe up on the feed: the next series card |
+| `pressHome()` / `bringToFront()` | Home key, then `activateApp` to come back |
 | `coldStart()` → `terminateApp` + `activateApp` | Force-stops the process and launches it from the launcher |
-| `expectVideoPlaying()` | Takes screenshots on the device; they come to the PC as PNG and **pixelmatch compares them locally** (see below) |
+| `expectVideoPlaying()` → `mobile: shell dumpsys audio` | Runs `dumpsys audio` on the phone and reads the state of the app's audio players (see below) |
 
 Timeouts: an element wait gives up after 15 s (`waitforTimeout`), a single test
 after 120 s (Mocha), and Appium closes a session that receives no command for
@@ -246,7 +247,7 @@ to mark the job green or red.
 | Spec reporter | Console | Every spec file, every test with ✓/✗, the error and stack for failures, totals and duration |
 | Failure screenshots | `artifacts/android-fail-*.png` | Device screen at the moment a test failed |
 | Appium server log | `artifacts/` | Every command Appium received and what the driver did on the device: the first place to look when a session doesn't start |
-| Cold start metric | Console line `[metric] cold start to playing video: N ms` | Time from launch to confirmed playback, for trend tracking |
+| Timing metrics | Console lines `[metric] cold start to Home: N ms`, `[metric] For You tap to playing: N ms` | For trend tracking |
 | Inspect output | `artifacts/inspect/*.xml`, `*.png` | View hierarchy and screenshot from `npm run inspect:android` |
 
 There is **no HTML report for Android yet**. The next step is
@@ -264,53 +265,72 @@ Appium running in a second terminal and the test run doesn't.
 
 ### Locators
 
-All locators live in `screens/selectors.ts`. Right now they are **text based**
-(the "14/86" counter format, gate wording from the web client), because they
-were written without access to the app's view hierarchy. The intended order,
-once the app exposes them, is: accessibility id / Compose `testTag` →
-resource-id → text. Switching is a change to that one file.
+All locators live in `screens/selectors.ts`, taken from the real view hierarchy
+of Shortical 0.5.68 with `npm run inspect:android`. What the app exposes:
 
-`scripts/inspect-android.ts` is the first thing to run on a device: it saves the
-current screen's XML and a screenshot, and prints how many elements have a
-resource-id or content-desc and how many clickable elements have neither.
-That number is the testability report to discuss with the developers.
+| Screen | Usable | Not usable |
+|---|---|---|
+| Home | Bottom navigation icons have accessibility labels (`Home`, `For You`, `My List`, `Rewards`, `Profile`); section titles are text | Cards have no ids |
+| For You (trailer feed, one card per series) | The video area is the one scrollable node; title, description, "Watch Now", "Episodes" are text | No ExoPlayer view here |
+| Series player (behind "Watch Now") | ExoPlayer's view has a resource-id (`player_view`) | The overlay (episode counter, buttons) is Compose with **no semantics**: no text, no label, no id |
+
+Preferred order once the app exposes more: Compose `testTag` as resource-id →
+accessibility label → text. Switching is a change to that one file.
+
+`scripts/inspect-android.ts` saves the current screen's XML and a screenshot,
+and prints how many elements have a resource-id or content-desc and how many
+clickable elements have neither: the testability report to discuss with the
+developers.
 
 ### How "is the video playing" works
 
-A native player has no `currentTime` in the view hierarchy, and "player is
-displayed" is also true when it is frozen. `helpers/playback.ts` checks the
-picture instead:
+The two obvious ways don't work on this build:
 
-1. Takes a screenshot and crops the centre of the screen (leaving out the status
-   bar, side buttons and subtitles, which change on their own).
-2. Waits 1.5 s, takes a second one, and counts the share of changed pixels with
-   `pixelmatch`.
-3. Repeats three times. **Playing** = at least two of three windows changed by
-   more than 2%. **Not playing** = every window changed by less than 2%.
+- **Screenshots are black.** The app's window has `FLAG_SECURE` (confirmed with
+  `dumpsys window`): Android blocks every capture of it, Appium's included.
+  Normal for paid video, but it rules out comparing frames.
+- **The overlay exposes nothing**: no playback time, no counter.
 
-If the screenshots are black, the app sets `FLAG_SECURE` (screen capture
-blocked, common for paid video). **Both** checks then fail with that message,
-and for "not playing" this matters most: two black frames never differ, so
-without the check "nothing plays behind the gate" would pass without looking
-at anything. A QA build without the flag fixes it.
+Android itself knows, though. Every audio player an app creates is listed by
+`dumpsys audio` with the app's uid and a state. Measured on the phone:
+
+| Moment | Shortical's players |
+|---|---|
+| Playing | `piid:231 state:started` (48 kHz stereo), plus two `idle` (preloaded next episodes) |
+| Paused (tap) | `piid:231 state:paused`, two `idle` |
+| On Home | none: the app releases its players when it leaves the player |
+
+`helpers/playback.ts` runs `dumpsys audio` through Appium's `mobile: shell`
+(allowed by `relaxedSecurity`) and reads that state:
+
+- **Playing** = one of the app's players is `started`, still started 1.5 s later.
+- **Not playing** = none is `started`, over three samples. As a positive
+  control it requires the app's players to be visible (a paused player is
+  still listed). In the background test the app may release them, so there the
+  positive control is the "playing" check just before pressing Home.
+- **A new episode** = a different player (`piid`) is `started` after the swipe.
+
+Device volume doesn't matter: a muted track is still `started`.
 
 ### What each test checks
 
-**playback.spec.ts**
+**playback.spec.ts** (every test starts from a cold start, so none depends on
+where the previous one left the app)
 
 | Test | Logic |
 |---|---|
-| cold start lands in the player and video starts within 10 s | Kills the app, launches it, waits up to 10 s for the episode counter, closes a first-run overlay if one is up, checks the video is playing, and logs the time to first playing video as a metric. |
-| free episode opened by link plays | Deep link to episode 1: counter shows 1, video is playing. |
-| swipe up moves to the next episode | Reads the counter, swipes up, waits for the counter to change, expects exactly +1, and checks the new episode plays. |
-| playback resumes after backgrounding | Plays episode 2, sends the app to the background for 5 s, checks it comes back to the foreground on the same episode and is still playing. |
+| cold start lands on Home with the bottom navigation | Kills the app, launches it, waits for the `Home` tab. Logs the time as a metric. |
+| For You opens the feed and video starts within 10 s | Taps `For You`, waits for the feed, then requires a `started` audio player within 10 s. Logs tap-to-playing time. |
+| tap on the video pauses it, a second tap resumes | Playing → tap → no started player (players still listed) → tap → playing again. Proves both directions of the signal on the same player. |
+| swipe up starts a different video (next series card) | Remembers the playing `piid`, swipes up on the feed, waits for a different `piid` to be `started`. |
+| going to the background stops playback, coming back resumes it | Playing → Home key → app not in the foreground and nothing `started` → bring to front → feed shown and playing again. |
 
-**paywall.spec.ts**: same boundary as on the web, read only.
-
-| Test | Logic |
-|---|---|
-| last free episode plays without a gate | Deep link to episode `SHORTICAL_LAST_FREE`: no gate, video playing. |
-| first locked episode is gated | Deep link to the next episode: a gate appears (sign-in, coins or VIP wording) and nothing plays behind it. |
+**paywall.spec.ts**: **pending**. The boundary needs one specific episode
+(13 free, 14 locked) and the Play Store build gives no way to open it:
+`https://shortical.com/player?...` is not handled by the app, and OneLink and
+`shortical://series/...` open Home whatever parameters are passed. The tests
+are declared without a body, so every report lists them as pending with the
+reason instead of hiding the gap (docs/FINDINGS.md).
 
 ## CI
 

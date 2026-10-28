@@ -63,6 +63,25 @@ and trust problem, and for paid traffic it can be an ad-policy problem.
   itself refuses locked media to an unauthorised client is a question for the
   team, not something this suite probes on production.)
 
+### Android app (0.5.68, build 562, Play Store), inspected 2026-10-28
+
+What a UI test can and cannot get from the release build, measured with
+`npm run inspect:android`, `dumpsys window`, `dumpsys audio` and
+`dumpsys package` on a real phone:
+
+| Area | Finding | Effect on automation | What would fix it |
+|---|---|---|---|
+| Screenshots | The main window has `FLAG_SECURE` | Every screenshot (Appium's, adb's, manual) is black; no visual checks, failure screenshots show nothing | A QA build without the flag |
+| Player overlay | Compose with no semantics: the episode counter, title and buttons have no text, label or id | The current episode and the overlay buttons can't be located | `testTagsAsResourceId = true` and test tags on the overlay |
+| Home and navigation | Bottom-nav icons have labels (`Home`, `For You`, ...); section titles are text | Usable today | — |
+| Player view | ExoPlayer `player_view` has a resource-id | Usable today | — |
+| Playback state | No MediaSession; the app's AudioTrack shows `started` / `paused` in `dumpsys audio` | Playback can be checked without screenshots (that is what the suite does) | — |
+| Opening an episode | `https://shortical.com/player?...` is not handled by the app; `shortical.onelink.me/o2gt?deep_link_sub1=…&deep_link_sub2=…` and `shortical://series/…` open Home | A test can't go straight to a given episode, so the Android paywall-boundary tests are pending | The deep link format from the team, or a debug entry point in a QA build |
+
+Question for the team: the web player's links carry `deep_link_sub1` /
+`deep_link_sub2`, the parameter names OneLink uses. Are web-to-app links meant
+to open the same episode in the app? From the outside they open Home.
+
 ## Drafts
 
 Unconfirmed issues found by test runs or agents, waiting for a human to

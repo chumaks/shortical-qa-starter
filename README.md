@@ -14,7 +14,7 @@ into the paywall, no purchases.
 |---|---|
 | Web tests (Playwright) | ✅ 20 runs (10 tests × phone and desktop) against shortical.com on every push and every morning in GitHub Actions |
 | Code quality gate | ✅ Runs before every commit and in CI |
-| Android tests (Appium) | 🟡 Written and type-checked; not yet run on a device (locators still need to be taken from the real app) |
+| Android tests (Appium) | ✅ 5 tests pass on a real phone against the Play Store app (0.5.68). Paywall boundary pending: blocked by the app's testability ([why](docs/FINDINGS.md#android-app-0568-build-562-play-store-inspected-2026-10-28)) |
 | iOS | ⏸ Needs the team's iOS build ([why](#ios)) |
 | Bugs found | 2 on the live site, see [FINDINGS](docs/FINDINGS.md) |
 
@@ -72,10 +72,14 @@ product, the code that tests it is checked:
 - Two known bugs are pinned: the tests are marked "expected to fail", so the
   suite stays green while the bugs exist and turns red the day they are fixed.
 
-**3. The Android app (Android tests, run on a phone).** Cold start to playing
-video, swipe to the next episode, coming back from the background, and the same
-paywall boundary. Because a native player exposes no playback time, "is the
-video playing" is checked by comparing screenshots a moment apart.
+**3. The Android app (Android tests, run on a phone).** Cold start to Home,
+For You starts playing, tap pauses and resumes, swipe starts the next video,
+background stops playback and coming back resumes it. The app blocks
+screenshots and its player overlay exposes nothing to automation, so "is the
+video playing" is read from Android itself: the state of the app's audio
+player (`started` / `paused`) in `dumpsys audio`. The paywall boundary can't be
+reached on Android yet: the app gives no way to open a given episode, and the
+tests say so in every report instead of being left out.
 
 **4. Was the green result earned?** A run where nothing executed, or where
 tests were silently skipped, also ends "green". After every CI run a separate
@@ -141,6 +145,10 @@ What each step is for:
   gate's text changed from "Save your progress" to "Sign in". CI went red on
   the next run, the behaviour was confirmed unchanged, the test was updated.
   (It is also the best argument for adding test ids to the app.)
+- **The Android app's testability, measured on a real phone**: screenshots
+  blocked (FLAG_SECURE), a player overlay with no text or ids, and no link that
+  opens a given episode. The Android suite was rebuilt on what the app does
+  expose, and the rest is written up as concrete asks for the team.
 - **Four weak spots in this repo's own tests**, found by applying the rules
   to it: two tests with selectors in the wrong place, and two "nothing
   happened" checks that could have passed without measuring anything.
@@ -151,7 +159,8 @@ What each step is for:
 
 The agent hooks were tested by feeding them sample commands and edits, and the
 rule checker against planted mistakes; the reviewer agent has not yet been
-calibrated on planted defects, and the Android tests have not run on a phone.
+calibrated on planted defects. Android tests run by hand on a connected phone,
+not in CI (no installable app build).
 
 ---
 
@@ -169,17 +178,18 @@ calibrated on planted defects, and the Android tests have not run on a phone.
 | Area | Web (Playwright) | Android (Appium) |
 |---|---|---|
 | Catalogue: home lists dramas, series page episode grid matches its count, free range stated | ✓ | |
-| Playback actually progresses (not just "player is visible") | ✓ position advances | ✓ picture keeps changing |
+| Playback actually happens (not just "player is visible") | ✓ position advances | ✓ app's audio player `started` |
 | HLS: manifests and segments load from the CDN with no errors | ✓ | |
 | Next episode preloaded during playback | ✓ | |
-| Swipe to next episode | | ✓ |
-| Cold start to playing video (time logged) | | ✓ |
-| Background and resume | | ✓ |
-| Paywall: last free episode plays, first locked one is gated and streams nothing | ✓ | ✓ |
+| Tap pauses and resumes | | ✓ |
+| Swipe to the next video | | ✓ new audio player starts |
+| Cold start to Home, For You to playing (time logged) | | ✓ |
+| Background stops playback, return resumes | | ✓ |
+| Paywall: last free episode plays, first locked one is gated and streams nothing | ✓ | pending (can't open a given episode) |
 | Episode count consistent across surfaces (known bug, `test.fail`) | ✓ | |
 | Locked episode page doesn't promise "Watch Free" (known bug, `test.fail`) | ✓ | |
 
-Web: 10 tests × 2 projects (Pixel 7 emulation and desktop Chrome). Android: 6 tests.
+Web: 10 tests × 2 projects (Pixel 7 emulation and desktop Chrome). Android: 5 tests + 2 pending.
 
 ### Run the web suite
 
@@ -211,10 +221,9 @@ ANDROID_UDID=<id> npm run test:android    # Appium is started by the WDIO servic
 
 On Windows PowerShell: `$env:ANDROID_UDID="<id>"; npm run test:android`.
 
-**First run on a new device: inspect.** The locators in
-[`mobile/screens/selectors.ts`](mobile/screens/selectors.ts) are provisional:
-they were written without the app's view hierarchy, from the labels the web
-client uses. Before trusting a red or green result, dump the real hierarchy:
+**Inspecting a screen.** The locators in
+[`mobile/screens/selectors.ts`](mobile/screens/selectors.ts) come from the real
+app (0.5.68). When the app changes, dump the screen again:
 
 ```bash
 npx appium                                          # terminal 1
@@ -223,8 +232,8 @@ ANDROID_UDID=<id> npm run inspect:android player    # terminal 2, app open on th
 
 It saves the XML and a screenshot to `artifacts/inspect/` and prints a short
 testability report: how many elements have a resource-id or content-desc, and
-how many clickable elements have neither. Swap the text fallbacks for real ids
-in `selectors.ts`; nothing else changes.
+how many clickable elements have neither. Locator changes go into
+`selectors.ts` only.
 
 With an internal build instead of the store one: `ANDROID_APP=/path/app.apk`.
 
@@ -241,16 +250,19 @@ and only `selectors.ts` gets an iOS variant (accessibility identifiers).
 
 - **Playback is checked by behaviour.** "A video element exists" is true for a
   frozen player. Web: `currentTime` must advance and HLS traffic must succeed.
-  Android: there is no `currentTime` in the view hierarchy, so the helper
-  compares the centre of two screenshots over several windows
-  ([`mobile/helpers/playback.ts`](mobile/helpers/playback.ts)). If the app sets
-  `FLAG_SECURE` (black screenshots), the check fails loudly rather than passing.
+  Android: screenshots are blocked and the overlay shows no time, so the
+  helper reads the app's audio player state from `dumpsys audio`
+  ([`mobile/helpers/playback.ts`](mobile/helpers/playback.ts)): started = playing,
+  a different player started = a new episode.
+- **Blocked tests stay visible.** The Android paywall tests are declared
+  as pending with the reason, so every report shows the gap.
 - **Known bugs are `test.fail()`, not skipped.** The suite stays green while an
   issue is open, and turns red the day it is fixed, so the marker gets removed.
 - **No test data is hard-coded.** Free range and episode totals are read from
   the series page.
 - **Locators prefer roles and stable ids;** the web client has no `data-testid`
-  yet (noted in FINDINGS), the Android ones are provisional until inspected.
+  yet (noted in FINDINGS); Android uses the accessibility labels and ids the
+  app does have.
 - **Production-safe.** Read-only flows only, enforced by a rule with no
   override; two workers in CI to keep the load polite.
 

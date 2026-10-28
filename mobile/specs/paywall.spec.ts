@@ -1,29 +1,19 @@
-import { DRAMA_ID } from '../../shared/test-data';
-import { openEpisodeByLink } from '../helpers/app';
-import { expectVideoNotPlaying, expectVideoPlaying } from '../helpers/playback';
-import { player } from '../screens/PlayerScreen';
-
 /**
- * Free/locked boundary for a signed-out user. The free range comes from the
- * web series page (episodes 1-13 for the default drama on 2026-10-20); override
- * with SHORTICAL_LAST_FREE if it changes.
+ * Free/locked boundary for a signed-out user (episode 13 free, 14 locked for
+ * "Room Service"). Covered on the web; on Android it is blocked, and the tests
+ * are kept as pending so the gap shows in every report instead of being silent.
  *
- * Read-only: the gate is checked for being shown. Nothing is typed into it and
- * no coins or subscription are bought, so the run is safe on a personal device.
+ * Why blocked (docs/FINDINGS.md, testability): a test has to open one specific
+ * episode, and the Play Store build offers no way to do that:
+ * - https://shortical.com/player?... links are not handled by the app;
+ * - OneLink (shortical.onelink.me/o2gt) and shortical://series/... open Home,
+ *   whatever parameters are passed (format undocumented);
+ * - navigating there through the UI needs locators the player screen lacks.
+ *
+ * Unblocked by any one of: the deep link format from the team, Compose test
+ * tags exposed as resource ids, or a QA build with a debug entry point.
  */
-const LAST_FREE = Number(process.env.SHORTICAL_LAST_FREE ?? 13);
-
 describe('Android: paywall boundary (signed out)', () => {
-  it('last free episode plays without a gate', async () => {
-    await openEpisodeByLink(DRAMA_ID, LAST_FREE);
-    await player.waitForPlayer();
-    expect(await player.isGateShown()).toBe(false);
-    await expectVideoPlaying();
-  });
-
-  it('first locked episode shows a gate and nothing plays behind it', async () => {
-    await openEpisodeByLink(DRAMA_ID, LAST_FREE + 1);
-    await player.gate.waitForDisplayed({ timeout: 15_000, timeoutMsg: 'no gate on a locked episode' });
-    await expectVideoNotPlaying();
-  });
+  it('last free episode plays without a gate (pending: cannot open a given episode, see FINDINGS)');
+  it('first locked episode shows a gate and nothing plays behind it (pending: cannot open a given episode, see FINDINGS)');
 });

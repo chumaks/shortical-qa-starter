@@ -14,7 +14,7 @@ loop:
 
 | # | Risk | Why it ranks here | First coverage |
 |---|---|---|---|
-| 1 | **Playback start and continuity**: slow first frame, stalls, black screen, audio/video desync, next episode not instant | Every session starts here; retention dies first | Automated: playing = position advances (web) / picture changes (Android); HLS manifest and segments succeed; next episode preloaded. Manual: real devices on poor networks |
+| 1 | **Playback start and continuity**: slow first frame, stalls, black screen, audio/video desync, next episode not instant | Every session starts here; retention dies first | Automated: playing = position advances (web) / app's audio player started (Android); HLS manifest and segments succeed; next episode preloaded. Manual: real devices on poor networks |
 | 2 | **Paywall boundary**: free episodes gated, or locked ones playable; wrong free range per series | Direct revenue in both directions | Automated: last free plays with no gate, first locked shows gate and streams nothing |
 | 3 | **Purchases**: coins, VIP subscription, restore, renewal, refunds, StoreKit / Play Billing / web (Stripe, Paddle) state sync | Money and support load; three payment stacks share one entitlement | Manual + sandbox accounts first; automate entitlement checks at API level once there is a test backend |
 | 4 | **Lifecycle**: background/foreground, interruptions (call, notification), network switch, offline, process death | Short sessions on the go; this is where mobile players break | Automated: background/resume. Manual matrix for the rest |
