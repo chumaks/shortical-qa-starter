@@ -26,6 +26,10 @@ jobs:
       - run: npx playwright install --with-deps chrome
       - run: npm run test:web
 
+      - name: summary
+        if: ${{ !cancelled() }}
+        run: npm run --silent summary >> "$GITHUB_STEP_SUMMARY"
+
       # A green exit code is not enough: fail the job if nothing ran or tests
       # were skipped. Prints PASS / FAIL / NOT-EARNED with counts.
       - name: earned
