@@ -1,5 +1,6 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { ANDROID_PACKAGE } from './constants';
+import { recordResult, resetAndroidReport, writeAndroidReport } from './report';
 
 /**
  * Android run against the Shortical build installed from Google Play.
@@ -39,13 +40,25 @@ export const config: WebdriverIO.Config = {
   reporters: ['spec'],
 
   onPrepare: () => {
-    mkdirSync('./artifacts', { recursive: true });
+    resetAndroidReport();
+  },
+
+  // After the run: artifacts/android-report.md (results, pending, metrics, failures).
+  onComplete: () => {
+    console.log(`Android report: ${writeAndroidReport('./mobile/specs')}`);
   },
 
   // Evidence on failure. The screenshot is black for this app (FLAG_SECURE), so
   // the view hierarchy at the moment of failure is the useful part: it shows
   // which screen the app was on and what could be located there.
-  afterTest: async (test, _context, { passed }) => {
+  afterTest: async (test, _context, { passed, duration, error }) => {
+    recordResult({
+      suite: test.parent,
+      title: test.title,
+      passed,
+      seconds: duration / 1000,
+      ...(error ? { error: String((error as Error).message ?? error) } : {}),
+    });
     if (!passed) {
       const name = test.title.replace(/[^\w-]+/g, '_');
       writeFileSync(`./artifacts/android-fail-${name}.xml`, await browser.getPageSource());

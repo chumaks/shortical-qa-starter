@@ -12,9 +12,9 @@ into the paywall, no purchases.
 
 | Part | State |
 |---|---|
-| Web tests (Playwright) | ✅ 20 runs (10 tests × phone and desktop) against shortical.com on every push and every morning in GitHub Actions |
+| Web tests (Playwright) | ✅ 24 runs (12 tests × phone and desktop) against shortical.com on every push and every morning in GitHub Actions |
 | Code quality gate | ✅ Runs before every commit and in CI |
-| Android tests (Appium) | ✅ 5 tests pass on a real phone against the Play Store app (0.5.68). Paywall boundary pending: blocked by the app's testability ([why](docs/FINDINGS.md#android-app-0568-build-562-play-store-inspected-2026-10-28)) |
+| Android tests (Appium) | ✅ 5 tests pass on a real phone against the Play Store app (0.5.68). Paywall boundary pending: blocked by the app's testability ([why](docs/FINDINGS.md#android-app-0568-build-562-play-store-inspected-2026-10-28)). Run by hand, not in CI ([why and where the report is](#android-where-it-runs-and-where-the-report-is)) |
 | iOS | ⏸ Needs the team's iOS build ([why](#ios)) |
 | Bugs found | 2 on the live site, see [FINDINGS](docs/FINDINGS.md) |
 
@@ -46,7 +46,7 @@ flowchart LR
 |---|---|---|
 | My computer, automatically | every `git commit` | `verify`: checks the test code itself. If it is red, the commit is refused. No site, no phone needed. |
 | GitHub Actions | every push, every pull request, every morning | `verify` again, then the web tests against the live site, a results table on the run page, and a check that the green result was earned. |
-| My computer, by hand | when needed | Android tests on a real phone with Shortical from the Play Store. Not in CI: there is no app build a CI machine may install. |
+| My computer, by hand | when needed | Android tests on a real phone with Shortical from the Play Store. Report: `artifacts/android-report.md`. Not in CI yet ([why](#android-where-it-runs-and-where-the-report-is)); CI only checks that the Android code compiles and its config is valid. |
 
 ### What is checked
 
@@ -71,6 +71,9 @@ product, the code that tests it is checked:
   paid one shows the sign-in gate and **no video for it is downloaded at all**.
 - Two known bugs are pinned: the tests are marked "expected to fail", so the
   suite stays green while the bugs exist and turns red the day they are fixed.
+  An "expected to fail" test also stays green if it breaks for a wrong reason
+  (a locator stops matching), so each one has a plain companion test proving
+  its measurements still read real values.
 
 **3. The Android app (Android tests, run on a phone).** Cold start to Home,
 For You starts playing, tap pauses and resumes, swipe starts the next video,
@@ -149,9 +152,12 @@ What each step is for:
   blocked (FLAG_SECURE), a player overlay with no text or ids, and no link that
   opens a given episode. The Android suite was rebuilt on what the app does
   expose, and the rest is written up as concrete asks for the team.
-- **Four weak spots in this repo's own tests**, found by applying the rules
-  to it: two tests with selectors in the wrong place, and two "nothing
-  happened" checks that could have passed without measuring anything.
+- **Weak spots in this repo's own tests**, found by applying the rules to it
+  and by a final audit of every assertion: selectors in the wrong place,
+  "nothing happened" checks that could pass without measuring anything, a count
+  check that would pass as 0 = 0, known-bug tests that would hide a broken
+  locator, and a swipe check that a trailer ending on its own could satisfy.
+  Each now has a control.
 - **A test that kept running out of time on CI**, flagged as flaky by the
   report instead of being hidden by the retry.
 
@@ -161,6 +167,73 @@ The agent hooks were tested by feeding them sample commands and edits, and the
 rule checker against planted mistakes; the reviewer agent has not yet been
 calibrated on planted defects. Android tests run by hand on a connected phone,
 not in CI (no installable app build).
+
+### Android: where it runs and where the report is
+
+Today the Android suite runs on my computer against a phone over USB
+(`npm run test:android`). It does not run in GitHub Actions, because a CI
+machine has neither a phone nor an app build it is allowed to install (the
+Play Store build can't be downloaded and installed legitimately by a script).
+What CI does for Android today is limited: `verify` type-checks and lints the
+Android code and validates the WDIO config, so a broken Android test can't be
+committed, but nothing there proves the app works.
+
+After every Android run the suite writes **`artifacts/android-report.md`**:
+verdict (PASS / FAIL / NOT-EARNED if nothing ran), one row per test with its
+time, the pending (blocked) tests with their reason, the startup metrics, and
+for each failure its error and the saved view hierarchy
+(`artifacts/android-fail-<test>.xml`). The console output of the run has the
+same results in the WDIO spec format.
+
+How it would get into CI (see [improvements](#improvements-not-done-yet)):
+an emulator job on each pull request with the team's QA build, or a
+self-hosted runner with a real phone, or a device farm for a nightly run on
+several devices. The same suite runs unchanged in each: only the
+capabilities in `mobile/wdio.android.conf.ts` differ.
+
+### Improvements not done yet
+
+Things I would do next. Each was left out for time or because it needs
+something only the team can give (a build, a test environment, a test id).
+
+**Needs the team**
+
+- **Android in CI.** An emulator job on pull requests with a QA build
+  (`ANDROID_APP=...` already installs it), a nightly run on a device farm
+  (BrowserStack or Firebase Test Lab) for several Android versions, and the
+  report published like the web one (JUnit + HTML/Allure instead of markdown).
+- **A testable QA build:** `testTag` + `testTagsAsResourceId` on the player
+  overlay (episode counter, buttons), no FLAG_SECURE in QA builds so failure
+  screenshots show something, and a link that opens a given series and episode.
+  That unblocks the Android paywall tests and a precise "which episode is
+  playing" check.
+- **iOS** with the same WebdriverIO suite on XCUITest, once there is an iOS
+  build for a simulator or a device.
+- **A non-production environment** for what can't be done on prod: signed-in
+  flows, in-app purchases in the stores' sandboxes (StoreKit, Play Billing),
+  coin and entitlement checks at the API level, and filling in the paywall gate.
+- **`data-testid` on the web client**, so tests stop depending on copy (the
+  gate text change broke a test once already).
+
+**Time**
+
+- Network conditions: playback on a slow or unstable network, HLS quality
+  switching, recovery after the connection drops.
+- Startup and playback timings collected over runs and shown as a trend, with
+  a budget that fails the run on regression. Today they are only logged, and
+  the Android "time to playing" includes the 1.5 s confirmation sample.
+- Accessibility checks on the web (axe) and analytics events (is the
+  "episode started" event sent once, with the right ids).
+- Localisation and dubbing: the same checks across the app's languages.
+- Android mutation checks automated like the web ones (`npm run mutate`);
+  today they are run by hand from a mutant spec (last run: both mutants of the
+  pause/resume test killed, see [HOW_TESTS_WORK](docs/HOW_TESTS_WORK.md)).
+- Calibrating the reviewer agent on planted defective tests, as was done for
+  the rule checker.
+- Known bugs as characterization tests (assert today's wrong value) instead of
+  `test.fail`, so an unrelated break can't hide inside an expected failure.
+- Housekeeping: bump GitHub Actions versions ahead of the Node 20 runner
+  deprecation; a scheduled run against several series instead of one.
 
 ---
 
@@ -189,7 +262,7 @@ not in CI (no installable app build).
 | Episode count consistent across surfaces (known bug, `test.fail`) | ✓ | |
 | Locked episode page doesn't promise "Watch Free" (known bug, `test.fail`) | ✓ | |
 
-Web: 10 tests × 2 projects (Pixel 7 emulation and desktop Chrome). Android: 5 tests + 2 pending.
+Web: 12 tests × 2 projects (Pixel 7 emulation and desktop Chrome), including two control tests for the known-bug checks. Android: 5 tests + 2 pending.
 
 ### Run the web suite
 
@@ -220,6 +293,9 @@ ANDROID_UDID=<id> npm run test:android    # Appium is started by the WDIO servic
 ```
 
 On Windows PowerShell: `$env:ANDROID_UDID="<id>"; npm run test:android`.
+
+The result is written to `artifacts/android-report.md` (see
+[where the report is](#android-where-it-runs-and-where-the-report-is)).
 
 **Inspecting a screen.** The locators in
 [`mobile/screens/selectors.ts`](mobile/screens/selectors.ts) come from the real
@@ -272,9 +348,8 @@ and only `selectors.ts` gets an iOS variant (accessibility identifiers).
 web suite → job summary (results table and failure messages on the run page)
 → `earned` → HTML and JSON reports uploaded as artifacts. With the repository
 variable `PUBLISH_REPORT=true` and GitHub Pages enabled, the HTML report is
-also published as a website. Android in CI needs an app build the pipeline may
-install; with one, the plan is an emulator job on pull requests and a nightly
-run on a device farm (BrowserStack or Firebase Test Lab).
+also published as a website. Android is not run in CI yet, see
+[Android: where it runs](#android-where-it-runs-and-where-the-report-is).
 
 ### AI harness: where each piece lives
 

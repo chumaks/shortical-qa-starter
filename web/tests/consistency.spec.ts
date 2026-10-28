@@ -33,6 +33,36 @@ test('episode count agrees across series page, episode page and player', async (
 });
 
 /**
+ * Measurement checks for the two known-bug tests above and below.
+ *
+ * test.fail() counts ANY failure as the expected one: if a locator broke, the
+ * known-bug test would still show as "failed as expected" and hide it. These
+ * plain tests read the same values and fail loudly if the reading breaks.
+ */
+test('known-bug measurements work: episode totals are readable on all three surfaces', async ({ page }) => {
+  const drama = new DramaPage(page, DRAMA_SLUG);
+  await drama.open();
+  expect(await drama.declaredEpisodeCount()).toBeGreaterThan(0);
+
+  const episodePage = new EpisodePage(page, DRAMA_SLUG);
+  await episodePage.open(1);
+  expect(await episodePage.declaredTotal()).toBeGreaterThan(0);
+
+  const player = new PlayerPage(page);
+  await player.open(DRAMA_ID, 1);
+  expect((await player.counterValues()).total).toBeGreaterThan(0);
+});
+
+test('known-bug measurements work: a locked episode page shows its lock notice and a title', async ({ page }) => {
+  const drama = new DramaPage(page, DRAMA_SLUG);
+  await drama.open();
+  const episodePage = new EpisodePage(page, DRAMA_SLUG);
+  await episodePage.open((await drama.lastFreeEpisode()) + 1);
+  await expect(episodePage.lockedNotice()).toBeVisible();
+  expect((await page.title()).length).toBeGreaterThan(0);
+});
+
+/**
  * Episode landing pages are what search and ads send people to. A locked episode
  * whose title promises "Watch Free" and whose body says "Unlock with coins or VIP"
  * sets up a paywall surprise. Known issue, see docs/FINDINGS.md #2.

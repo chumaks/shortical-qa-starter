@@ -22,7 +22,8 @@ shortical-qa-starter/
 │       ├── paywall.spec.ts
 │       └── consistency.spec.ts
 ├── mobile/                     WebdriverIO + Appium suite for the Android app
-│   ├── wdio.android.conf.ts    Device capabilities, Appium service, failure screenshots
+│   ├── wdio.android.conf.ts    Device capabilities, Appium service, failure evidence, report hooks
+│   ├── report.ts               Writes artifacts/android-report.md after every run
 │   ├── constants.ts            App package id (shortical.com)
 │   ├── screens/                Screen objects
 │   │   ├── selectors.ts        Every Android locator, in one file (taken from the real app)
@@ -100,7 +101,7 @@ don't depend on a particular series: they use whatever the For You feed plays.
 | Test | Logic |
 |---|---|
 | home page lists dramas | Home has at least 10 links to `/drama/...`. Catches an empty or broken catalogue. |
-| episode grid matches the declared count | The number in "All N episodes" equals the number of episode links on the page. |
+| episode grid matches the declared count | The number in "All N episodes" is above 0 (otherwise the check would pass as 0 = 0) and equals the number of episode links on the page. |
 | free range is stated, CTA opens episode 1 | The "Episodes 1–N are free" text exists and N is less than the total; "Watch episode 1 free" links to the player with episode 1. |
 
 **playback.spec.ts**: the video really plays. A visible `<video>` proves
@@ -127,12 +128,19 @@ forever. Each negative check first proves, in the same test, that the
 measurement can see something.
 
 **consistency.spec.ts**: the same facts agree everywhere they are shown. Both
-tests pin live bugs ([FINDINGS.md](FINDINGS.md)) and are marked `test.fail()`.
+Two tests pin live bugs ([FINDINGS.md](FINDINGS.md)) and are marked `test.fail()`;
+two plain tests prove their measurements still work.
 
 | Test | Logic |
 |---|---|
 | episode count agrees across surfaces | Reads the total from the series page ("All 86 episodes"), the episode landing page ("1 of 114") and the player header ("1/86"), and expects all three to be equal. |
 | locked episode doesn't promise free viewing | Opens the first locked episode's landing page, confirms the page says "Unlock with coins or VIP", and expects the `<title>` not to say "Watch Free". |
+| known-bug measurements work: totals readable | Not `test.fail`. Reads the same three totals and requires each to be a number above 0. |
+| known-bug measurements work: lock notice and title | Not `test.fail`. The locked page shows its lock notice and has a non-empty title. |
+
+Why the companion tests: a `test.fail()` test is green whenever it fails, for
+any reason. If a locator stopped matching, the known-bug test would fail for
+the wrong reason and still be green. The companion tests fail in that case.
 
 How `test.fail()` behaves: while the bug exists the test fails and Playwright
 reports it as **passed (expected failure)**, so CI stays green. When the bug
@@ -223,10 +231,11 @@ after 120 s (Mocha), and Appium closes a session that receives no command for
 
 **4. After each test**
 
-The `afterTest` hook checks the result. On failure it saves a screenshot of
-the device screen to `artifacts/android-fail-<test-title>.png`, so you see what
-was on screen at the moment of failure (a popup, the browser instead of the
-app, a black screen).
+The `afterTest` hook records the result (title, passed, time, error) to
+`artifacts/android-results.jsonl`. On failure it also saves the view hierarchy
+to `artifacts/android-fail-<test-title>.xml` (which screen the app was on and
+what could be located there) and a screenshot (black for this app because of
+FLAG_SECURE, useful with a QA build).
 
 **5. Session end (after each spec file)**
 
@@ -236,7 +245,8 @@ run. The next spec file opens a new session from step 2.
 
 **6. End of run**
 
-The Appium service stops the server, WebdriverIO prints the summary and exits
+The `onComplete` hook writes `artifacts/android-report.md` (see below). The
+Appium service stops the server, WebdriverIO prints the summary and exits
 with code **0** if every test passed and **1** otherwise. CI uses this exit code
 to mark the job green or red.
 
@@ -245,12 +255,14 @@ to mark the job green or red.
 | Output | Where | What it shows |
 |---|---|---|
 | Spec reporter | Console | Every spec file, every test with ✓/✗, the error and stack for failures, totals and duration |
-| Failure screenshots | `artifacts/android-fail-*.png` | Device screen at the moment a test failed |
+| **Run report** | `artifacts/android-report.md` | Verdict (PASS / FAIL / NOT-EARNED if nothing ran), every test with ✅/❌ and time, pending tests with the reason, metrics, each failure's error and its hierarchy file |
+| Failure evidence | `artifacts/android-fail-*.xml`, `*.png` | View hierarchy and device screen at the moment a test failed |
 | Appium server log | `artifacts/` | Every command Appium received and what the driver did on the device: the first place to look when a session doesn't start |
-| Timing metrics | Console lines `[metric] cold start to Home: N ms`, `[metric] For You tap to playing: N ms` | For trend tracking |
+| Timing metrics | Console lines `[metric] ...` and the report's Metrics section | Cold start to Home, For You tap to playing |
 | Inspect output | `artifacts/inspect/*.xml`, `*.png` | View hierarchy and screenshot from `npm run inspect:android` |
 
-There is **no HTML report for Android yet**. The next step is
+The report is markdown, not HTML, and Android doesn't run in CI yet (no
+installable build, see the README). The next step is
 `@wdio/allure-reporter` (history, screenshots attached to the failed step) and
 a JUnit XML reporter for CI, as one config change each.
 
@@ -319,11 +331,16 @@ where the previous one left the app)
 
 | Test | Logic |
 |---|---|
-| cold start lands on Home with the bottom navigation | Kills the app, launches it, waits for the `Home` tab. Logs the time as a metric. |
+| cold start lands on Home with the bottom navigation | Kills the app, launches it, waits for the `Home` tab and checks `For You` is displayed. Logs the time as a metric. |
 | For You opens the feed and video starts within 10 s | Taps `For You`, waits for the feed, then requires a `started` audio player within 10 s. Logs tap-to-playing time. |
 | tap on the video pauses it, a second tap resumes | Playing → tap → no started player (players still listed) → tap → playing again. Proves both directions of the signal on the same player. |
-| swipe up starts a different video (next series card) | Remembers the playing `piid`, swipes up on the feed, waits for a different `piid` to be `started`. |
+| swipe up starts a different video (next series card) | Remembers the playing `piid`. **Control:** 2 s without a swipe, the same `piid` is still the one playing (so a change later is caused by the swipe, not by a trailer ending). Then swipes up and waits for a different `piid` to be `started`. |
 | going to the background stops playback, coming back resumes it | Playing → Home key → app not in the foreground and nothing `started` → bring to front → feed shown and playing again. |
+
+**Can these tests fail?** Checked by hand with a mutant spec (2026-10-28, on
+the phone): the pause test with the pause tap removed fails ("not playing" sees
+`piid 503 state:started`), and with the resume tap removed fails ("no audio
+player reached started within 15 s"). Both mutants killed.
 
 **paywall.spec.ts**: **pending**. The boundary needs one specific episode
 (13 free, 14 locked) and the Play Store build gives no way to open it:

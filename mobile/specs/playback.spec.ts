@@ -1,6 +1,7 @@
 import { bringToFront, coldStart, isAppInForeground, pressHome } from '../helpers/app';
-import { expectVideoNotPlaying, expectVideoPlaying, waitForAnotherPlayer } from '../helpers/playback';
+import { expectVideoNotPlaying, expectVideoPlaying, playingPlayer, waitForAnotherPlayer } from '../helpers/playback';
 import { home } from '../screens/HomeScreen';
+import { metric } from '../report';
 import { player } from '../screens/PlayerScreen';
 
 /**
@@ -21,7 +22,8 @@ describe('Android: playback', () => {
     const started = Date.now();
     await coldStart();
     await home.waitForHome();
-    console.log(`[metric] cold start to Home: ${Date.now() - started} ms`);
+    expect(await home.tabForYou.isDisplayed()).toBe(true);
+    metric('cold start to Home', Date.now() - started);
   });
 
   it('For You opens the feed and video starts within 10 s', async () => {
@@ -31,7 +33,7 @@ describe('Android: playback', () => {
     await home.openForYou();
     await player.waitForFeed();
     await expectVideoPlaying(10_000);
-    console.log(`[metric] For You tap to playing: ${Date.now() - tapped} ms`);
+    metric('For You tap to playing (incl. 1.5 s confirmation)', Date.now() - tapped);
   });
 
   it('tap on the video pauses it, a second tap resumes', async () => {
@@ -48,6 +50,10 @@ describe('Android: playback', () => {
   it('swipe up starts a different video (next series card)', async () => {
     await openFeed();
     const before = await expectVideoPlaying();
+    // Control: without a swipe the same player keeps playing, so a change
+    // after the swipe is caused by the swipe, not by the trailer ending.
+    await browser.pause(2_000); // lint-allow: observation window for the no-swipe control
+    expect(await playingPlayer()).toBe(before);
 
     await player.swipeToNext();
 

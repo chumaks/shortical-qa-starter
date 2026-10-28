@@ -17,6 +17,7 @@ test.describe('Catalog', () => {
     await drama.open();
 
     const declared = await drama.declaredEpisodeCount();
+    expect(declared, 'a series with no episodes would make the count check 0 = 0').toBeGreaterThan(0);
     await expect(drama.episodeLinks()).toHaveCount(declared);
   });
 
