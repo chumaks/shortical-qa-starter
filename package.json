@@ -37,6 +37,7 @@
     "@wdio/mocha-framework": "^10.1.0",
     "@wdio/spec-reporter": "^10.1.0",
     "appium": "^3.8.0",
+    "appium-uiautomator2-driver": "^8.7.2",
     "eslint": "^10.13.0",
     "eslint-plugin-playwright": "^2.12.1",
     "pixelmatch": "^8.0.0",

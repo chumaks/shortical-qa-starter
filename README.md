@@ -51,7 +51,7 @@ emulator with Google Play and **Shortical installed from the Play Store**
 
 ```bash
 npm ci
-npm run setup:android                     # installs the UiAutomator2 driver
+npx appium driver doctor uiautomator2     # checks ANDROID_HOME, JAVA_HOME, adb (the driver itself comes with npm ci)
 adb devices                               # copy the device id
 ANDROID_UDID=<id> npm run test:android    # Appium is started by the WDIO service
 ```
