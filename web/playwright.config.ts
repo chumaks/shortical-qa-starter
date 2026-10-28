@@ -26,7 +26,10 @@ export default defineConfig({
   use: {
     baseURL: BASE_URL,
     channel: 'chrome',
-    trace: 'retain-on-failure',
+    // Traces store every network response body, and here those are HLS video
+    // segments: one trace of a playback test is tens of MB. Keep only the first
+    // failed attempt of each test; a retry that fails the same way adds nothing.
+    trace: 'retain-on-first-failure',
     video: 'retain-on-failure',
     screenshot: 'only-on-failure',
     launchOptions: { args: ['--autoplay-policy=no-user-gesture-required'] },

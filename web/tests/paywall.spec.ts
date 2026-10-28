@@ -37,13 +37,21 @@ test.describe('Paywall boundary (signed-out viewer)', () => {
   });
 
   test('first locked episode shows the gate and does not stream media', async ({ page }) => {
+    // The heaviest test in the suite: series page, two player loads, a gate that
+    // animates in after several seconds, and a 3 s observation window. On CI
+    // runners it measured 27-58 s and once crossed the default 60 s.
+    test.setTimeout(90_000);
+
     const firstLocked = lastFree + 1;
     const player = new PlayerPage(page);
 
-    // Positive control in the same page and listener: free media is captured...
+    // Positive control in the same page and listener: free media is captured.
+    // Waiting for the first media response is enough to prove the listener
+    // works; playback itself is covered by the other tests.
     await player.open(DRAMA_ID, lastFree);
-    await player.waitForPlaybackPast(2);
-    expect(player.mediaFor(DRAMA_ID, lastFree).length, 'network log captured the free episode').toBeGreaterThanOrEqual(1);
+    await expect
+      .poll(() => player.mediaFor(DRAMA_ID, lastFree).length, { message: 'network log captured the free episode' })
+      .toBeGreaterThanOrEqual(1);
 
     // ...then the locked episode.
     await player.open(DRAMA_ID, firstLocked);

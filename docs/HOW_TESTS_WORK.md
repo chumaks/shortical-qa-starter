@@ -170,7 +170,7 @@ server on the device → the app, and the answer comes back the same way.
 |---|---|
 | Device | USB debugging on (or an emulator with Google Play). Shortical installed from the Play Store. `adb devices` shows the device as `device`, not `unauthorized`. |
 | `npm ci` | Installs WebdriverIO, the Appium server itself (as a project dependency, so no global install) and the image libraries for the playback check. |
-| `npm run setup:android` | `appium driver install uiautomator2`: downloads the Android driver into Appium's home folder. Needed once per machine. |
+| Android driver | `appium-uiautomator2-driver` is a dev dependency, so `npm ci` installs the pinned version with the project. `npm run setup:android` (re)installs it if needed. `npx appium driver doctor uiautomator2` checks that `ANDROID_HOME`, `JAVA_HOME` and `adb` are in place. |
 
 **1. Start: `ANDROID_UDID=<id> npm run test:android`**
 
